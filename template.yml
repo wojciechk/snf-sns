@@ -1,0 +1,50 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  A Step Functions Workflow that sends messages to Amazon SNS
+
+
+Resources:
+##########################################################################
+#   STEP FUNCTION                                                        #
+##########################################################################
+
+  StateMachineWaitAndNotify:
+    Type: AWS::Serverless::StateMachine # More info about State Machine Resource: https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-resource-statemachine.html
+    Properties:
+      DefinitionUri: statemachine/stateMachine.asl.json
+      Role:
+        Fn::GetAtt: [ StatesExecutionRole, Arn ]
+      Type: STANDARD
+      
+##########################################################################
+#   Roles                                                               #
+##########################################################################
+  StatesExecutionRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - !Sub states.${AWS::Region}.amazonaws.com
+            Action: "sts:AssumeRole"
+      Path: "/"
+      Policies:
+        - PolicyName: SNSAccess
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Resource:
+                  - "*"
+                Action:
+                  - sns:Publish
+##########################################################################
+#   Outputs                                                              #
+##########################################################################
+Outputs:
+  StateMachineWaitAndNotify:
+    Value: !Ref StateMachineWaitAndNotify
+    Description: StateMachineWaitAndNotify Arn

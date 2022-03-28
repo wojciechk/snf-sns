@@ -1,0 +1,146 @@
+{
+  "Comment": "Wojciech Kaminski TPM-2526 state machine",
+  "StartAt": "Validate Input",
+  "States": {
+    "Validate Input": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            {
+              "And": [
+                {
+                  "Variable": "$.Topic.ARN",
+                  "IsPresent": true
+                },
+                {
+                  "Variable": "$.Topic.ARN",
+                  "StringMatches": "arn:aws:sns:*:*:*"
+                }
+              ]
+            },
+            {
+              "And": [
+                {
+                  "Variable": "$.Message",
+                  "IsPresent": true
+                },
+                {
+                  "Variable": "$.Message",
+                  "IsString": true
+                },
+                {
+                  "Not": {
+                    "Variable": "$.Message",
+                    "StringEquals": ""
+                  }
+                }
+              ]
+            },
+            {
+              "And": [
+                {
+                  "Variable": "$.Schedule[0]",
+                  "IsPresent": true
+                }
+              ]
+            }
+          ],
+          "Next": "Map"
+        }
+      ],
+      "Default": "Failed Input validation"
+    },
+    "Map": {
+      "Type": "Map",
+      "Iterator": {
+        "StartAt": "Validate Schedule",
+        "States": {
+          "Validate Schedule": {
+            "Type": "Choice",
+            "Choices": [
+              {
+                "And": [
+                  {
+                    "Variable": "$.Item.Timestamp",
+                    "IsPresent": true
+                  },
+                  {
+                    "Variable": "$.Item.Timestamp",
+                    "IsTimestamp": true
+                  },
+                  {
+                    "Not": {
+                      "Variable": "$.Item.Delay",
+                      "IsPresent": true
+                    }
+                  }
+                ],
+                "Next": "timestamp wait"
+              },
+              {
+                "And": [
+                  {
+                    "Variable": "$.Item.Delay",
+                    "IsPresent": true
+                  },
+                  {
+                    "Variable": "$.Item.Delay",
+                    "NumericGreaterThanEquals": 0
+                  },
+                  {
+                    "Not": {
+                      "Variable": "$.Item.Timestamp",
+                      "IsPresent": true
+                    }
+                  }
+                ],
+                "Next": "delay wait"
+              }
+            ],
+            "Default": "Schedule Validation Fail"
+          },
+          "timestamp wait": {
+            "Type": "Wait",
+            "Next": "SNS Publish",
+            "TimestampPath": "$.Item.Timestamp"
+          },
+          "delay wait": {
+            "Type": "Wait",
+            "Next": "SNS Publish",
+            "SecondsPath": "$.Item.Delay"
+          },
+          "SNS Publish": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::sns:publish",
+            "Parameters": {
+              "TopicArn.$": "$.TopicArn",
+              "Message": {
+                "timestamp.$": "$$.State.EnteredTime",
+                "message.$": "$.Message"
+              }
+            },
+            "Next": "Success"
+          },
+          "Success": {
+            "Type": "Succeed"
+          },
+          "Schedule Validation Fail": {
+            "Type": "Fail"
+          }
+        }
+      },
+      "ItemsPath": "$.Schedule",
+      "Parameters": {
+        "Item.$": "$$.Map.Item.Value",
+        "TopicArn.$": "$.Topic.ARN",
+        "Message.$": "$.Message"
+      },
+      "MaxConcurrency": 1,
+      "End": true
+    },
+    "Failed Input validation": {
+      "Type": "Fail"
+    }
+  }
+}
